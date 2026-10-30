@@ -1,0 +1,8 @@
+{
+  "name": "Aureon",
+  "description": "A modern productivity dashboard for tracking progress, tasks, and mindfulness.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

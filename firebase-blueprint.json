@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and main state data",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "roadmap": { "type": "object" },
+        "xp": { "type": "number" },
+        "tasks": { "type": "array" },
+        "streak": { "type": "number" },
+        "history": { "type": "array" },
+        "userProfile": { "type": "object" },
+        "lastCompletedDate": { "type": "string" },
+        "chatMessages": { "type": "array" }
+      },
+      "required": ["userId"]
+    },
+    "Journal": {
+      "title": "Journal",
+      "description": "User journal entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "insight": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "content", "insight", "createdAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Public facing profile data for leaderboard",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "xp": { "type": "number" },
+        "avatarUrl": { "type": "string" }
+      },
+      "required": ["userId", "name", "xp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User private data"
+    },
+    "users/{userId}/journals/{journalId}": {
+      "schema": { "$ref": "Journal" },
+      "description": "User's journal entries"
+    },
+    "publicProfiles/{userId}": {
+      "schema": { "$ref": "PublicProfile" },
+      "description": "Publicly accessible profile info for leaderboards"
+    }
+  }
+}

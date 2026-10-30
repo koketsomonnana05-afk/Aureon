@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+
+    function isMap(val) { return val is map; }
+    function isNum(val) { return val is number; }
+    function isList(val) { return val is list; }
+    function isStr(val) { return val is string; }
+
+    // User Entity Validation
+    function isValidUser(data) {
+       let hasAllowedKeys = data.keys().hasOnly(['userId', 'roadmap', 'xp', 'tasks', 'streak', 'history', 'userProfile', 'lastCompletedDate']);
+       let hasUserId = !('userId' in data) || (isStr(data.userId) && data.userId == request.auth.uid);
+       let hasRoadmap = !('roadmap' in data) || data.roadmap == null || isMap(data.roadmap);
+       let hasXp = !('xp' in data) || data.xp == null || (isNum(data.xp) && data.xp >= 0);
+       let hasTasks = !('tasks' in data) || data.tasks == null || (isList(data.tasks) && data.tasks.size() <= 1000);
+       let hasStreak = !('streak' in data) || data.streak == null || (isNum(data.streak) && data.streak >= 0);
+       let hasHistory = !('history' in data) || data.history == null || (isList(data.history) && data.history.size() <= 1000);
+       let hasUserProfile = !('userProfile' in data) || data.userProfile == null || isMap(data.userProfile);
+       let hasLastCompletedDate = !('lastCompletedDate' in data) || data.lastCompletedDate == null || isStr(data.lastCompletedDate);
+       
+       return hasAllowedKeys && hasUserId && hasRoadmap && hasXp && hasTasks && hasStreak && hasHistory && hasUserProfile && hasLastCompletedDate;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming()) && incoming().keys().hasAll(['userId']);
+      allow update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming()) && (incoming().diff(existing()).affectedKeys().hasOnly(['roadmap', 'xp', 'tasks', 'streak', 'history', 'userProfile', 'lastCompletedDate'])) && (!('userId' in incoming().diff(existing()).affectedKeys()));
+      
+      match /journals/{journalId} {
+        function isValidJournal(data) {
+            let hasAllowedKeys = data.keys().hasOnly(['id', 'userId', 'content', 'insight', 'createdAt']);
+            let isIdValid = data.id is string && data.id.size() <= 128 && data.id == journalId;
+            let isUserIdValid = data.userId is string && data.userId == request.auth.uid;
+            let isContentValid = data.content is string && data.content.size() <= 50000;
+            let isInsightValid = data.insight is string && data.insight.size() <= 10000;
+            let isCreatedAtValid = data.createdAt is number;
+            return hasAllowedKeys && isIdValid && isUserIdValid && isContentValid && isInsightValid && isCreatedAtValid;
+        }
+
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId && resource.data.userId == request.auth.uid;
+        allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidId(journalId)
+          && isValidJournal(incoming()) && incoming().keys().hasAll(['id', 'userId', 'content', 'insight', 'createdAt']);
+        allow update: if false; // immutable
+      }
+    }
+
+    // Public Profile Entity Validation
+    function isValidPublicProfile(data) {
+       let hasAllowedKeys = data.keys().hasOnly(['userId', 'name', 'xp', 'avatarUrl']);
+       let hasUserId = !('userId' in data) || (data.userId is string && data.userId == request.auth.uid);
+       let hasName = !('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 200);
+       let hasXp = !('xp' in data) || (data.xp is number && data.xp >= 0);
+       let hasAvatarUrl = !('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000);
+       return hasAllowedKeys && hasUserId && hasName && hasXp && hasAvatarUrl;
+    }
+
+    match /publicProfiles/{userId} {
+      allow read: if isSignedIn() && resource.data.xp >= 0;
+      allow list: if isSignedIn() && resource.data.xp >= 0;
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidPublicProfile(incoming()) && incoming().keys().hasAll(['userId', 'name', 'xp']);
+      allow update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidPublicProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'xp', 'avatarUrl']) && (!('userId' in incoming().diff(existing()).affectedKeys()));
+    }
+  }
+}

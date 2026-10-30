@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    // Enforcing email verified as requested, though without an email-verification flow it disables email-based signup unless users are verified through Google Auth.
+    function isSignedIn() { return request.auth != null; }
+
+    function isMap(val) { return val is map; }
+    function isNum(val) { return val is number; }
+    function isList(val) { return val is list; }
+    function isStr(val) { return val is string; }
+
+    // User Entity Validation
+    function isValidUser(data) {
+       let hasUserId = !('userId' in data) || (isStr(data.userId) && data.userId == request.auth.uid);
+       let hasRoadmap = !('roadmap' in data) || data.roadmap == null || isMap(data.roadmap);
+       let hasXp = !('xp' in data) || data.xp == null || (isNum(data.xp) && data.xp >= 0);
+       let hasTasks = !('tasks' in data) || data.tasks == null || (isList(data.tasks) && data.tasks.size() <= 1000);
+       let hasStreak = !('streak' in data) || data.streak == null || (isNum(data.streak) && data.streak >= 0);
+       let hasHistory = !('history' in data) || data.history == null || (isList(data.history) && data.history.size() <= 1000);
+       let hasUserProfile = !('userProfile' in data) || data.userProfile == null || isMap(data.userProfile);
+       let hasLastCompletedDate = !('lastCompletedDate' in data) || data.lastCompletedDate == null || isStr(data.lastCompletedDate);
+       let hasChatMessages = !('chatMessages' in data) || data.chatMessages == null || (isList(data.chatMessages) && data.chatMessages.size() <= 1000);
+       
+       return hasUserId && hasRoadmap && hasXp && hasTasks && hasStreak && hasHistory && hasUserProfile && hasLastCompletedDate && hasChatMessages;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      allow update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      
+      match /journals/{journalId} {
+        function isValidJournal(data) {
+            let isIdValid = data.id is string && data.id.size() <= 128 && data.id == journalId;
+            let isUserIdValid = data.userId is string && data.userId == request.auth.uid;
+            let isContentValid = data.content is string && data.content.size() <= 50000;
+            let isInsightValid = data.insight is string && data.insight.size() <= 10000;
+            let isCreatedAtValid = data.createdAt is number;
+            return isIdValid && isUserIdValid && isContentValid && isInsightValid && isCreatedAtValid;
+        }
+
+        allow read, list: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidId(journalId)
+          && isValidJournal(incoming());
+        allow update: if false;
+      }
+    }
+
+    // Public Profile Entity Validation
+    function isValidPublicProfile(data) {
+       let hasUserId = !('userId' in data) || (data.userId is string && data.userId == request.auth.uid);
+       let hasName = !('name' in data) || (data.name is string && data.name.size() <= 200);
+       let hasXp = !('xp' in data) || (data.xp is number);
+       let hasAvatarUrl = !('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000000);
+       return hasUserId && hasName && hasXp && hasAvatarUrl;
+    }
+
+    match /publicProfiles/{userId} {
+      allow read, list: if isSignedIn();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidPublicProfile(incoming());
+    }
+  }
+}
